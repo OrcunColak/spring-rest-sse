@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SSE Client (Debug Mode)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        textarea { width: 700px; height: 120px; }
+        button { margin-top: 10px; padding: 6px 12px; }
+        #events {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+<h2>SSE Client (Manual JWT + Debug)</h2>
+
+<div>
+    <div>Paste Bearer Token:</div>
+    <textarea id="token" placeholder="Paste JWT here..."></textarea>
+    <br>
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+</div>
+
+<h3>Output</h3>
+<div id="events"></div>
+
+<script>
+
+    const SSE_URL = "http://localhost:8080/sse/connect";
+    const eventsDiv = document.getElementById("events");
+
+    let controller = null;
+
+    function log(msg) {
+        const el = document.createElement("div");
+        el.textContent = new Date().toLocaleTimeString() + " | " + msg;
+        eventsDiv.appendChild(el);
+        eventsDiv.scrollTop = eventsDiv.scrollHeight;
+    }
+
+    function logSeparator() {
+        log("--------------------------------------------------");
+    }
+
+    /* ===================== CONNECT ===================== */
+
+    async function connect() {
+
+        const token = document.getElementById("token").value.trim();
+
+        if (!token) {
+            log("ERROR: No token provided.");
+            return;
+        }
+
+        disconnect();
+        controller = new AbortController();
+
+        logSeparator();
+        log("Connecting to: " + SSE_URL);
+        log("Authorization header present: YES");
+
+        try {
+
+            const response = await fetch(SSE_URL, {
+                method: "GET",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Accept": "text/event-stream"
+                },
+                signal: controller.signal
+            });
+
+            /* ---------- HTTP RESPONSE INFO ---------- */
+
+            log("HTTP STATUS  : " + response.status);
+            log("STATUS TEXT  : " + response.statusText);
+
+            log("RESPONSE HEADERS:");
+            response.headers.forEach((v, k) => log("  " + k + ": " + v));
+
+            if (!response.ok) {
+
+                log("SERVER RETURNED ERROR RESPONSE");
+
+                try {
+                    const text = await response.text();
+                    if (text) {
+                        log("RESPONSE BODY:");
+                        log(text);
+                    }
+                } catch {
+                    log("Could not read response body.");
+                }
+
+                return;
+            }
+
+            log("SSE connection established.");
+            logSeparator();
+
+            /* ---------- START STREAM READING ---------- */
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+
+                const { value, done } = await reader.read();
+
+                if (done) {
+                    log("Stream closed by server.");
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const parts = buffer.split("\n\n");
+                buffer = parts.pop();
+
+                for (const part of parts) {
+                    parseEvent(part);
+                }
+            }
+
+        } catch (err) {
+
+            logSeparator();
+            log("FETCH FAILED");
+            log("Error name : " + err.name);
+            log("Message    : " + err.message);
+
+            if (err.name === "TypeError") {
+                log("");
+                log("COMMON CAUSES:");
+                log("• Server not reachable");
+                log("• Wrong URL or port");
+                log("• CORS blocked by browser");
+                log("• HTTPS / HTTP mismatch");
+                log("• Server rejected connection before response");
+            }
+
+            if (err.name === "AbortError") {
+                log("Request aborted (manual disconnect).");
+            }
+
+            logSeparator();
+        }
+    }
+
+    /* ===================== EVENT PARSER ===================== */
+
+    function parseEvent(raw) {
+
+        let eventName = "message";
+        let data = "";
+
+        raw.split("\n").forEach(line => {
+            if (line.startsWith("event:")) {
+                eventName = line.substring(6).trim();
+            }
+            if (line.startsWith("data:")) {
+                data += line.substring(5).trim();
+            }
+        });
+
+        log("EVENT [" + eventName + "]");
+        log("DATA  " + data);
+        log("");
+    }
+
+    /* ===================== DISCONNECT ===================== */
+
+    function disconnect() {
+        if (controller) {
+            controller.abort();
+            controller = null;
+            log("Disconnected.");
+        }
+    }
+
+</script>
+
+</body>
+</html>
