@@ -1,11 +1,14 @@
 package com.colak.spring.rest.sse;
 
 import com.colak.spring.rest.sse.dto.request.DisconnectRequest;
+import com.colak.spring.rest.sse.events.SseShutdownEvent;
 import com.colak.spring.rest.sse.registry.SseClientId;
 import com.colak.spring.rest.sse.registry.SseConnection;
 import com.colak.spring.rest.sse.registry.SseRegistry;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,6 +30,29 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CommandSseController {
     private final SseRegistry registry;
+
+    @EventListener(ContextClosedEvent.class)
+    public void closeAll() {
+        SseShutdownEvent event = SseShutdownEvent.now();
+        for (SseConnection connection : registry.all()) {
+            try {
+                // Client receives
+                // event: SHUTDOWN
+                // data: {
+                //   "protocolVersion": "1.0"
+                // }
+                var builder = SseEmitter.event()
+                        .name(event.eventType().name())
+                        // tells an SSE client not to automatically reconnect after receiving the shutdown event.
+                        .reconnectTime(0);
+                connection.send(builder);
+            } catch (Exception ignored) {
+                // Connection may already be closed
+            } finally {
+                connection.complete();
+            }
+        }
+    }
 
     /// Creates the SseEmitter, builds the SseClientId from Spring Security's Authentication, registers the connection,
     /// and returns the emitter

@@ -8,14 +8,17 @@ import java.time.Instant;
 
 public record SseHeartBeatEvent(
         Instant timestamp,
-        SseEventType eventType,
         SseProtocolVersion protocolVersion
 ) {
+
+    /// Send the event type
+    public SseEventType eventType() {
+        return SseEventType.HEARTBEAT;
+    }
 
     public static SseHeartBeatEvent now() {
         return new SseHeartBeatEvent(
                 Instant.now(),
-                SseEventType.HEARTBEAT,
                 SseProtocolVersion.V1
         );
     }
