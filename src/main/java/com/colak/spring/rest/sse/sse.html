@@ -63,6 +63,7 @@
         }
 
         disconnect();
+        /* AbortController is a browser API used to cancel an ongoing asynchronous operation,  including your fetch() SSE connection. */
         controller = new AbortController();
 
         logSeparator();
@@ -177,6 +178,12 @@
         log("EVENT [" + eventName + "]");
         log("DATA  " + data);
         log("");
+
+        // Server is shutting down
+        if (eventName === "SHUTDOWN") {
+            log("Server is shutting down. Closing SSE connection.");
+            disconnect();
+        }
     }
 
     /* ===================== DISCONNECT ===================== */
