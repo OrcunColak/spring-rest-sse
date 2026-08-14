@@ -19,6 +19,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.UUID;
 
+/// Accepting userId directly from the request is only appropriate if the endpoint is otherwise trusted.
+/// If the endpoint is publicly accessible, a client could simply provide another user's ID and potentially receive their SSE events.
+/// So we are using Spring Security
 @RestController
 @RequestMapping("/sse")
 @RequiredArgsConstructor
